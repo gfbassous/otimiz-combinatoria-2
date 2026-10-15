@@ -1,0 +1,59 @@
+# IEEE RTS-79 weekly peak load, 52 weeks. Annual peak = 2850 MW.
+# Source: IEEE Committee Report, IEEE Trans. PAS-98(6):2047-2054, 1979.
+# INDEX = week 1..52.  peak_mw = peak_pct/100 * 2850.
+# season follows the RTS-79 definition: winter = weeks 1-8 and 44-52,
+# summer = weeks 18-30, spring/fall = weeks 9-17 and 31-43.
+
+INDEX:52:<ulong>,peak_pct:52:<double>,peak_mw:52:<double>,season:52:<string>
+1,86.2,2456.7,Winter
+2,90,2565,Winter
+3,87.8,2502.3,Winter
+4,83.4,2376.9,Winter
+5,88,2508,Winter
+6,84.1,2396.85,Winter
+7,83.2,2371.2,Winter
+8,80.6,2297.1,Winter
+9,74,2109,Spring-Fall
+10,73.7,2100.45,Spring-Fall
+11,71.5,2037.75,Spring-Fall
+12,72.7,2071.95,Spring-Fall
+13,70.4,2006.4,Spring-Fall
+14,75,2137.5,Spring-Fall
+15,72.1,2054.85,Spring-Fall
+16,80,2280,Spring-Fall
+17,75.4,2148.9,Spring-Fall
+18,83.7,2385.45,Summer
+19,87,2479.5,Summer
+20,88,2508,Summer
+21,85.6,2439.6,Summer
+22,81.1,2311.35,Summer
+23,90,2565,Summer
+24,88.7,2527.95,Summer
+25,89.6,2553.6,Summer
+26,86.1,2453.85,Summer
+27,75.5,2151.75,Summer
+28,81.6,2325.6,Summer
+29,80.1,2282.85,Summer
+30,88,2508,Summer
+31,72.2,2057.7,Spring-Fall
+32,77.6,2211.6,Spring-Fall
+33,80,2280,Spring-Fall
+34,72.9,2077.65,Spring-Fall
+35,72.6,2069.1,Spring-Fall
+36,70.5,2009.25,Spring-Fall
+37,78,2223,Spring-Fall
+38,69.5,1980.75,Spring-Fall
+39,72.4,2063.4,Spring-Fall
+40,72.4,2063.4,Spring-Fall
+41,74.3,2117.55,Spring-Fall
+42,74.4,2120.4,Spring-Fall
+43,80,2280,Spring-Fall
+44,88.1,2510.85,Winter
+45,88.5,2522.25,Winter
+46,90.9,2590.65,Winter
+47,94,2679,Winter
+48,89,2536.5,Winter
+49,94.2,2684.7,Winter
+50,97,2764.5,Winter
+51,100,2850,Winter
+52,95.2,2713.2,Winter

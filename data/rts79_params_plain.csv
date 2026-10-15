@@ -1,0 +1,12 @@
+parameter,value,unit,note
+annual_peak_mw,2850,MW,RTS-79 system annual peak; week 51
+installed_capacity_mw,3405,MW,sum of cap_mw over 32 units
+n_units,32,count,RTS-79 generating units
+horizon_weeks,52,weeks,planning horizon
+reserve_margin,0.15,fraction,ASSUMPTION not RTS-79; available capacity >= (1+m)*peak_mw
+maint_load_mw_weeks,14086,MW-weeks,sum of cap_mw*maint_weeks; total maintenance demand
+crews_total,8,crews,ASSUMPTION not RTS-79; crews available each week (constant)
+crew_weeks_demand,236,crew-weeks,sum of crew_req*maint_weeks over all units
+crews_min_feasible,7,crews,smallest crew count with a feasible schedule; 6 is infeasible
+reserve_margin_at_peak,0.1947,fraction,installed/peak-1; hard ceiling on any feasible margin
+reserve_margin_max_feasible,0.18,fraction,largest margin solved feasible with these windows; 0.20 is infeasible
