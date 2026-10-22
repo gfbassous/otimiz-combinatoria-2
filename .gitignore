@@ -67,3 +67,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+RTS-GMLC-master
+.venv
+DataFrame-master
+.vscode
