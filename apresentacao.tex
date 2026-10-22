@@ -1,0 +1,585 @@
+% =====================================================================
+%  Apresentacao - Despacho Hidrotermico com Unit Commitment
+%  Otimizacao Combinatoria
+%
+%  Compilar:  pdflatex apresentacao.tex   (rodar 2x para o sumario)
+%
+%  PLACEHOLDERS: procure por "% PREENCHER" -- sao as tabelas de
+%  resultados que voce completa depois de rodar os experimentos.
+% =====================================================================
+\documentclass[10pt,aspectratio=169]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{array}
+
+\usetheme{Boadilla}
+\usecolortheme{seahorse}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{caption}[numbered]
+\setbeamerfont{block title}{size=\small}
+
+% ---- Notacao ----
+\newcommand{\Nb}{\mathcal{N}}          % barras
+\newcommand{\Lb}{\mathcal{L}}          % linhas
+\newcommand{\Hb}{\mathcal{H}}          % UHEs
+\newcommand{\Gb}{\mathcal{G}}          % UTEs
+\newcommand{\Tb}{\mathcal{T}}          % etapas
+\newcommand{\pH}{p^{H}}                % geracao hidraulica
+\newcommand{\pT}{p^{T}}                % geracao termica
+\newcommand{\uH}{u^{H}}                % estado UHE
+\newcommand{\uT}{u^{T}}                % estado UTE
+
+% ---- Displays compactos (slides densos de formulacao) ----
+% Use DEPOIS de \small: mudanca de corpo de fonte reseta estes comprimentos.
+\newcommand{\displaycompacto}{%
+  \setlength{\abovedisplayskip}{1pt}%
+  \setlength{\belowdisplayskip}{1pt}%
+  \setlength{\abovedisplayshortskip}{1pt}%
+  \setlength{\belowdisplayshortskip}{1pt}%
+}
+
+\title[Despacho Hidrotérmico]{Despacho Hidrotérmico com \emph{Unit Commitment}}
+\subtitle{Branch \& Bound, Planos de Corte e Relaxação Lagrangeana}
+\author{Guilherme Bassous}
+\institute{Otimização Combinatória I}
+\date{08 de setembro de 2026}
+
+\begin{document}
+
+% ===================== 1. CAPA =====================
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ===================== 2. INTRODUCAO =====================
+\begin{frame}{O problema}
+
+  Programar a operação de um sistema hidrotérmico ao longo de um horizonte
+  discreto, minimizando custo de combustível, partidas e déficit, respeitando
+  a rede elétrica e a dinâmica dos reservatórios.
+
+  \vspace{0.4em}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Decisões}
+        \footnotesize
+        \begin{itemize}\itemsep2pt
+          \item \textbf{Contínuas:} geração hidráulica e térmica, turbinamento,
+                vertimento, defluência, armazenamento, fluxos, ângulos, déficit
+          \item \textbf{Binárias:} estado das usinas (ligada/desligada),
+                partida e desligamento das térmicas
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Restrições}
+        \footnotesize
+        \begin{itemize}\itemsep2pt
+          \item Atendimento à demanda (1\textsuperscript{a} lei de Kirchhoff)
+          \item Fluxo DC e limites de transmissão (2\textsuperscript{a} lei)
+          \item Balanço hídrico e cascata entre reservatórios
+          \item Capacidade e geração mínima (acopladas às binárias)
+          \item \alert{Rampas} de geração e de defluência
+          \item \alert{Tempo mínimo} ligado / desligado
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.3em}
+  \begin{block}{Escala da instância --- 2 semanas em base horária}
+    \centering\scriptsize
+    \begin{tabular}{lr@{\qquad}lr@{\qquad}lr}
+      \toprule
+      Barras ($N$) & 14  & Variáveis contínuas & $24\,528$ & Restrições         & $34\,573$ \\
+      Linhas ($L$) & 20  & Variáveis binárias  & $6\,384$  & \quad rampas       & $6\,030$  \\
+      UHEs ($H$)   & 4   & \quad \emph{total}  & $30\,912$ & \quad tempo mínimo & $3\,339$  \\
+      UTEs ($G$)   & 5   & Etapas ($T$)        & 336       & \quad rede (KCL/KVL) & $11\,424$ \\
+      \bottomrule
+    \end{tabular}
+  \end{block}
+\end{frame}
+
+% ===================== 3. SISTEMA-TESTE =====================
+\begin{frame}{Sistema-teste: IEEE 14 barras}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \footnotesize
+      \textbf{Rede.} 14 barras, 20 linhas, reatâncias em p.u.\ na base de
+      100~MVA. Susceptância $B_{\ell\ell} = S_{base}/x_\ell$, de modo que o
+      fluxo $f = B A^\top \theta$ já sai em MW e a 2\textsuperscript{a} lei
+      distribui os fluxos pelas malhas.
+
+      \vspace{0.6em}
+      \textbf{Hidráulico.} Cascata
+      $\text{UHE}_1 \to \text{UHE}_2 \to \text{UHE}_3 \to \text{UHE}_4$,
+      com defluência mínima e limite de deplecionamento.
+
+      \vspace{0.6em}
+      \textbf{Térmico.} Cinco máquinas, da base barata
+      ($42$~R\$/MWh) ao \emph{peaker} caro ($450$~R\$/MWh), com custo de
+      partida, rampa e tempos mínimos distintos.
+
+      \vspace{0.6em}
+      \textbf{Déficit.} Penalizado a $3\,000$~R\$/MWh em cada barra, o que
+      garante viabilidade do despacho.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \IfFileExists{figuras/1_geracao_demanda.png}{%
+        \includegraphics[width=\linewidth]{figuras/1_geracao_demanda.png}\\
+        {\tiny Geração por fonte \emph{vs.} demanda total}%
+      }{%
+        \fbox{\parbox[c][3.2cm][c]{0.9\linewidth}{\centering\footnotesize
+          \emph{figuras/1\_geracao\_demanda.png}}}%
+      }
+
+      \vspace{0.8em}
+      \scriptsize
+      \begin{tabular}{lrrr}
+        \toprule
+        UTE & $\bar p$ & CVU & $t^{on}/t^{off}$ \\
+        \midrule
+        1 & 110 & 42  & 6 / 5 \\
+        2 &  85 & 85  & 4 / 3 \\
+        3 &  70 & 130 & 3 / 2 \\
+        4 &  60 & 210 & 2 / 2 \\
+        5 &  45 & 450 & 2 / 2 \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ===================== 4. VARIAVEIS =====================
+\begin{frame}{Formulação: variáveis de decisão}
+  \small
+  Índices: barra $n \in \Nb$, linha $\ell \in \Lb$, UHE $u \in \Hb$,
+  UTE $g \in \Gb$, etapa $t \in \Tb$.
+
+  \vspace{0.5em}
+  \centering
+  \begin{tabular}{llll}
+    \toprule
+    Símbolo & Descrição & Tipo & Código \\
+    \midrule
+    $\pH_{u,t}$    & geração da UHE $u$                & $\mathbb{R}_+$    & \texttt{g\_uhe} \\
+    $q_{u,t}$      & turbinamento                      & $\mathbb{R}_+$    & \texttt{turb\_uhe} \\
+    $s_{u,t}$      & vertimento                        & $\mathbb{R}_+$    & \texttt{vert\_uhe} \\
+    $d_{u,t}$      & defluência                        & $\mathbb{R}_+$    & \texttt{defl\_uhe} \\
+    $v_{u,t}$      & armazenamento                     & $\mathbb{R}_+$    & \texttt{uhe\_arm} \\
+    $\uH_{u,t}$    & estado da UHE                     & $\{0,1\}$         & \texttt{uch} \\
+    \midrule
+    $\pT_{g,t}$    & geração da UTE $g$                & $\mathbb{R}_+$    & \texttt{g\_ute} \\
+    $\uT_{g,t}$    & estado da UTE                     & $\{0,1\}$         & \texttt{uct} \\
+    $y_{g,t}$      & partida                           & $\{0,1\}$         & \texttt{part\_ute} \\
+    $z_{g,t}$      & desligamento                      & $\{0,1\}$         & \texttt{desl\_ute} \\
+    \midrule
+    $f_{\ell,t}$   & fluxo na linha $\ell$             & $\mathbb{R}$      & \texttt{fluxo} \\
+    $\theta_{n,t}$ & ângulo de fase                    & $\mathbb{R}$      & \texttt{theta} \\
+    $r_{n,t}$      & déficit na barra $n$              & $\mathbb{R}_+$    & \texttt{deficit} \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% ===================== 5. FO + REDE =====================
+\begin{frame}{Formulação: objetivo e rede elétrica}
+  \begin{block}{Função objetivo}
+    \[
+      \min \;\; \underbrace{\sum_{g \in \Gb}\sum_{t \in \Tb} c_g \, \pT_{g,t}}_{\text{combustível}}
+      \;+\; \underbrace{\sum_{g \in \Gb}\sum_{t \in \Tb} c^{\text{par}}_g \, y_{g,t}}_{\text{partidas}}
+      \;+\; \underbrace{c^{\text{def}} \sum_{n \in \Nb}\sum_{t \in \Tb} r_{n,t}}_{\text{déficit}}
+    \]
+  \end{block}
+
+  \begin{block}{1\textsuperscript{a} lei de Kirchhoff --- atendimento à demanda}
+    \[
+      M^H \pH_t \;+\; M^T \pT_t \;+\; r_t \;-\; A f_t \;=\; D_t,
+      \qquad \forall t \in \Tb
+    \]
+    \footnotesize
+    $A \in \{-1,0,1\}^{N \times L}$ é a matriz de incidência barra--linha
+    ($+1$ na origem, $-1$ no destino); $M^H, M^T$ localizam as usinas nas barras.
+  \end{block}
+
+  \begin{block}{2\textsuperscript{a} lei de Kirchhoff --- fluxo DC}
+    \[
+      f_t = B A^\top \theta_t, \qquad
+      \theta_{\text{ref},t} = 0, \qquad
+      -\bar f_\ell \le f_{\ell,t} \le \bar f_\ell
+    \]
+  \end{block}
+\end{frame}
+
+% ===================== 6. HIDRAULICO =====================
+\begin{frame}{Formulação: subsistema hidráulico}
+  \small
+  \displaycompacto
+  \begin{block}{Balanço hídrico e produção}
+    \begin{align*}
+      q_{u,t} + s_{u,t} &= d_{u,t}                 & \forall u,t \\
+      \pH_{u,t}         &= \rho_u \, q_{u,t}       & \forall u,t
+    \end{align*}
+  \end{block}
+
+  \begin{block}{Dinâmica dos reservatórios (cascata)}
+    \begin{align*}
+      v_{u,1} &= \tfrac{1}{2}\bar v_u + a_{u,1} - q_{u,1} - s_{u,1}
+                 + \textstyle\sum_{m \in \text{mont}(u)} d_{m,1} & \forall u \\
+      v_{u,t} &= v_{u,t-1} + a_{u,t} - q_{u,t} - s_{u,t}
+                 + \textstyle\sum_{m \in \text{mont}(u)} d_{m,t} & \forall u,\; t \ge 2 \\
+      v_{u,T} &\ge \tfrac{1}{2}\bar v_u                          & \forall u
+    \end{align*}
+    \footnotesize
+    $a_{u,t}$ é a vazão incremental; o armazenamento final evita esvaziar
+    os reservatórios ao fim do horizonte.
+  \end{block}
+
+  \begin{block}{Comprometimento e deplecionamento}
+    \begin{align*}
+      \underline{p}^H_u \, \uH_{u,t} \;\le\; \pH_{u,t} &\;\le\; \bar p^H_u \, \uH_{u,t}
+        & \forall u,t \\
+      d_{u,t} \;\ge\; \underline{d}_u, \qquad
+      \bigl| d_{u,t} - d_{u,t-1} \bigr| &\;\le\; \Delta^H_u
+        & \forall u,\; t \ge 2
+    \end{align*}
+  \end{block}
+\end{frame}
+
+% ===================== 7. TERMICO =====================
+\begin{frame}{Formulação: subsistema térmico}
+  \begin{block}{Capacidade acoplada ao estado}
+    \[
+      \underline{p}^T_g \, \uT_{g,t} \;\le\; \pT_{g,t} \;\le\; \bar p^T_g \, \uT_{g,t},
+      \qquad \forall g \in \Gb,\; t \in \Tb
+    \]
+    \footnotesize
+    Máquina desligada gera zero; ligada, opera acima do mínimo técnico.
+    É a relação \emph{variable upper/lower bound} que o solver explora em
+    \emph{implied bound cuts}.
+  \end{block}
+
+  \begin{block}{Rampas de tomada e alívio de carga}
+    \[
+      -R_g \;\le\; \pT_{g,t} - \pT_{g,t-1} \;\le\; R_g,
+      \qquad \forall g \in \Gb,\; t \ge 2
+    \]
+  \end{block}
+
+  \vspace{0.3em}
+  \begin{alertblock}{Observação sobre os dados}
+    \footnotesize
+    Para a UTE\,1 vale $\underline{p}^T_1 = 45 > R_1 = 22$: partir a máquina
+    exigiria um salto de $0$ para $45$~MW, que viola a rampa. Na prática
+    a UTE\,1 fica presa ao estado inicial --- modelos reais usam um limite
+    de rampa \emph{de partida} separado.
+  \end{alertblock}
+\end{frame}
+
+% ===================== 8. COMPROMETIMENTO =====================
+\begin{frame}{Formulação: \emph{unit commitment} e tempos mínimos}
+  \small
+  \displaycompacto
+  \begin{block}{Lógica de transição de estado}
+    \begin{align*}
+      \uT_{g,1} - \uT_{g,0} &= y_{g,1} - z_{g,1}   & \forall g \\
+      \uT_{g,t} - \uT_{g,t-1} &= y_{g,t} - z_{g,t} & \forall g,\; t \ge 2 \\
+      y_{g,t} + z_{g,t} &\le 1                     & \forall g,t
+    \end{align*}
+    \footnotesize
+    $\uT_{g,0}$ é o estado herdado da etapa anterior ao horizonte.
+  \end{block}
+
+  \begin{block}{Tempo mínimo ligado / desligado (janelas contíguas)}
+    \begin{align*}
+      \sum_{s = t - t^{on}_g + 1}^{t} y_{g,s} &\;\le\; \uT_{g,t}
+        & \forall g,\; t \ge t^{on}_g \\[2pt]
+      \sum_{s = t - t^{off}_g + 1}^{t} z_{g,s} &\;\le\; 1 - \uT_{g,t}
+        & \forall g,\; t \ge t^{off}_g
+    \end{align*}
+    \footnotesize
+    Leitura: se houve partida nas últimas $t^{on}_g$ etapas, a máquina
+    \emph{tem} de estar ligada agora --- e simetricamente para o desligamento.
+    São $3\,339$ restrições, o núcleo combinatório do problema.
+  \end{block}
+\end{frame}
+
+% ===================== 9. B&B CONFIGURACAO =====================
+\begin{frame}{Branch \& Bound: configuração experimental}
+  \small
+  Para isolar o efeito de cada componente, o solver foi configurado com os
+  recursos automáticos desligados:
+
+  \vspace{0.6em}
+  \centering
+  \begin{tabular}{llp{5.6cm}}
+    \toprule
+    Parâmetro & Valor & Motivo \\
+    \midrule
+    \texttt{Threads}       & 1 & determinismo e comparação justa de tempos \\
+    \texttt{Presolve}      & 0 & preservar a formulação original \\
+    \texttt{Heuristics}    & 0 & isolar a busca do efeito das heurísticas \\
+    \texttt{Cuts}          & 0/1 & desligado no \emph{baseline} \\
+    \texttt{InfProofCuts}  & 0 & desliga os cortes \emph{learned} (análise de conflito) \\
+    \texttt{PreCrush}      & 1 & necessário para injetar cortes via \texttt{cbCut} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{1em}
+  \raggedright
+  \begin{block}{Métricas coletadas}
+    \footnotesize
+    Nós explorados, tempo de resolução, limite inferior na raiz, melhor
+    solução inteira encontrada e \emph{gap} final de otimalidade.
+  \end{block}
+\end{frame}
+
+% ===================== 10. B&B RESULTADOS =====================
+\begin{frame}{Branch \& Bound: resultados}
+  \centering
+  \begin{table}
+    \small
+    \begin{tabular}{lrrrr}
+      \toprule
+      Configuração & Nós & Tempo (s) & Melhor sol. (R\$) & Gap alvo \\
+      \midrule
+      Cortes do solver (padrão)    & $31$       & $11$     & $9\,632\,934{,}7$ & $10^{-4}$ \\
+      \emph{Baseline} (sem cortes) & $174\,884$ & $5\,460$ & $9\,624\,105{,}8$ & $10^{-3}$ \\
+      \bottomrule
+    \end{tabular}
+    \caption{Desempenho do \emph{branch \& bound} sob diferentes configurações
+      (\texttt{Threads}~1, sem \emph{presolve} e sem heurísticas nos dois casos).}
+  \end{table}
+
+  \vspace{0.5em}
+  \begin{block}{Comentários}
+    \footnotesize
+    Com os cortes automáticos ligados o solver separa $658$ cortes
+    ($341$ \emph{implied bound}, $266$ \emph{learned}, $34$ Gomory, $12$
+    \emph{flow cover}, $5$ MIR) e fecha o gap de $10^{-4}$ em \alert{$31$ nós}.
+    Desligando os cortes a árvore explode: mesmo relaxando o alvo para
+    $10^{-3}$ são \alert{$174\,884$ nós} e $91$~min --- cerca de $500\times$ mais
+    tempo. O limite da relaxação linear é fraco porque as binárias de tempo
+    mínimo e partida só se acoplam pelas restrições de rampa; sem cortes o
+    \emph{bound} sobe devagar e o gap passa a cair muito lentamente.
+  \end{block}
+\end{frame}
+
+% ===================== 11. CORTES: MIR AGREGADO =====================
+\begin{frame}{Planos de corte I: MIR agregado}
+  \small
+  Separação de cortes \emph{Mixed Integer Rounding} a partir de combinações
+  de linhas do modelo, implementada em \emph{callback} (\texttt{MIPNODE}).
+
+  \vspace{0.4em}
+  \begin{block}{Procedimento, por linha-base}
+    \footnotesize
+    \begin{enumerate}\itemsep2pt
+      \item \textbf{Agregar} --- combinar até $k$ linhas para eliminar variáveis
+            contínuas estritamente entre seus limites (proxy de variável básica).
+      \item \textbf{Transladar} --- levar cada variável ao limite mais próximo
+            do ponto relaxado, de modo que todas fiquem $\ge 0$.
+      \item \textbf{Aplicar MIR} --- sobre $\sum_j a_j x_j \le b$, com
+            $f_0 = b - \lfloor b \rfloor$:
+            \[
+              \sum_{j \in I} \Bigl(\lfloor a_j \rfloor
+                + \tfrac{(f_j - f_0)^+}{1 - f_0}\Bigr) x_j
+              \;+\; \sum_{j \in C} \tfrac{\min(a_j,0)}{1-f_0}\, x_j
+              \;\le\; \lfloor b \rfloor
+            \]
+      \item \textbf{Destransladar} e testar violação; repetir para várias
+            escalas $\lambda$ da linha, guardando o corte mais violado.
+    \end{enumerate}
+  \end{block}
+
+  \begin{block}{Filtros de qualidade}
+    \footnotesize
+    Violação \alert{relativa} ($\text{viol}/\max(1,|b|)$), descarte de cortes
+    mal condicionados ($\max|a_j| / \min|a_j| > 10^7$) e \alert{deduplicação}
+    por assinatura do corte normalizado.
+  \end{block}
+\end{frame}
+
+% ===================== 12. CORTES: AGREGACAO 1a LEI =====================
+\begin{frame}{Planos de corte II: agregação da 1\textsuperscript{a} lei}
+  \small
+  Somando a 1\textsuperscript{a} lei sobre \emph{todas} as barras, o termo de
+  rede desaparece: cada linha entra com $+1$ na origem e $-1$ no destino, logo
+  $\mathbf{1}^\top A = 0$. Sobra o balanço de energia do sistema:
+  \[
+    \sum_{u \in \Hb} \pH_{u,t} \;+\; \sum_{g \in \Gb} \pT_{g,t} \;+\; S_t \;=\; D_t,
+    \qquad S_t = \sum_{n \in \Nb} r_{n,t}, \quad D_t = \sum_{n \in \Nb} D_{n,t}
+  \]
+
+  Com $\pH_{u,t} \le \bar p^H_u \uH_{u,t}$ e $\pT_{g,t} \le \bar p^T_g \uT_{g,t}$
+  obtém-se uma \alert{mochila} nas binárias de \emph{unit commitment}:
+  \[
+    \sum_j P_j z_j + S_t \;\ge\; D_t,
+    \qquad z_j \in \{0,1\}, \quad S_t \ge 0
+  \]
+
+  \begin{block}{Fortalecimento por MIR}
+    \footnotesize
+    A desigualdade acima já é satisfeita pela relaxação contínua. Complementando
+    $z_j = 1 - \bar z_j$, passando a ``$\le$'' e aplicando MIR com
+    $b = \lambda(P - D_t)$, $f_0 = b - \lfloor b \rfloor$:
+    \[
+      \sum_j \bar a_j z_j + \frac{\lambda}{1-f_0}\, S_t
+      \;\ge\; \sum_j \bar a_j - \lfloor b \rfloor
+    \]
+    Para $\lambda = 1$ e $P_j$ inteiro isso vira
+    $\;\sum_j P_j z_j + S_t/(1-f_0) \ge \lceil D_t \rceil$: \textbf{arredonda a
+    demanda para cima e encarece o déficit}. O corte é separado por etapa, no nó raiz.
+  \end{block}
+\end{frame}
+
+% ===================== 13. CORTES: RESULTADOS =====================
+\begin{frame}{Planos de corte: resultados}
+  \centering
+  \begin{table}
+    \small
+    \begin{tabular}{lrrrr}
+      \toprule
+      Estratégia & Nós & $\Delta$ nós (\%) & Tempo (s) & Melhor sol. (R\$) \\
+      \midrule
+      Sem cortes (\emph{baseline})                    & $174\,884$ & --        & $5\,460$ & $9\,624\,105{,}8$ \\
+      MIR agregado (agrupamento geral)                & $130\,323$ & $-25{,}5$ & $4\,333$ & $9\,624\,057{,}7$ \\
+      Agregação 1\textsuperscript{a} lei (por etapa)  & $179\,503$ & $+2{,}6$  & $5\,005$ & $9\,624\,209{,}5$ \\
+      \bottomrule
+    \end{tabular}
+    \caption{Efeito dos planos de corte sobre a árvore (gap alvo $10^{-3}$ em todos).}
+  \end{table}
+
+  \vspace{0.3em}
+  \raggedright
+  \begin{block}{Comentários}
+    \footnotesize
+    O MIR agregado sobre linhas escolhidas heuristicamente é o mais efetivo:
+    corta \alert{$25{,}5\%$ dos nós} e $20{,}6\%$ do tempo em relação ao
+    \emph{baseline}. A agregação da 1\textsuperscript{a} lei, apesar de ser um
+    corte válido derivado à mão, quase não move a árvore ($+2{,}6\%$ de nós,
+    $-8{,}3\%$ de tempo): arredondar a demanda para cima só morde quando
+    $D_t$ tem parte fracionária relevante, e a folga de déficit $S_t$ absorve
+    boa parte da violação. As três configurações terminam em soluções
+    equivalentes dentro da tolerância de $10^{-3}$ (dispersão de $0{,}0016\%$).
+  \end{block}
+\end{frame}
+
+% ===================== 14. LAGRANGEANA: FORMULACAO =====================
+\begin{frame}{Relaxação lagrangeana: formulação}
+  \small
+  Dualizam-se os blocos que acoplam o problema no tempo dentro de cada máquina:
+  \alert{rampas} e \alert{tempo mínimo} ($9\,369$ restrições, todas ``$\le$'',
+  logo $\lambda \ge 0$).
+
+  \[
+    z^* = \min_{x} \; \bigl\{\, c(x) \;:\; x \in X,\;\; A_R x \le b_R,\;\; A_M x \le b_M \,\bigr\}
+  \]
+  \[
+    L(\lambda) \;=\; \min_{x \in X} \;
+      c(x) + \lambda_R^\top (A_R x - b_R) + \lambda_M^\top (A_M x - b_M)
+  \]
+
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Fica em $X$}
+        \footnotesize
+        1\textsuperscript{a} e 2\textsuperscript{a} leis, balanço hídrico e
+        cascata, capacidade e geração mínima, \emph{lógica de transição}
+        $\uT_t - \uT_{t-1} = y_t - z_t$.
+      \end{block}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Propriedades}
+        \footnotesize
+        \begin{itemize}\itemsep1pt
+          \item $L(\lambda) \le z^*$ para todo $\lambda \ge 0$
+          \item $L$ é côncava e linear por partes
+          \item $s = A x^*(\lambda) - b$ é subgradiente de $L$
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.4em}
+  \begin{alertblock}{Dual lagrangeano}
+    \centering
+    $z_{LD} = \max_{\lambda \ge 0} L(\lambda)$, \qquad com \qquad
+    $z_{LP} \;\le\; z_{LD} \;\le\; z^*$
+    \\[2pt]
+    {\footnotesize $z_{LD} > z_{LP}$ porque $X$ \emph{não} tem a propriedade
+    da integralidade.}
+  \end{alertblock}
+\end{frame}
+
+% ===================== 15. LAGRANGEANA: SUBGRADIENTE E RESULTADOS =====================
+\begin{frame}{Relaxação lagrangeana: subgradiente e resultados}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \small
+      \begin{block}{Método do subgradiente}
+        \footnotesize
+        $\lambda^0 = 0$; a cada iteração:
+        \begin{enumerate}\itemsep1pt
+          \item resolver o subproblema $\Rightarrow x^k,\, L^k$
+          \item $s^k = A x^k - b$
+          \item $\alpha_k = \rho_k \dfrac{UB - L^k}{\|s^k\|^2}$ \hfill (Polyak)
+          \item $\lambda^{k+1} = \max\bigl(0,\; \lambda^k + \alpha_k s^k\bigr)$
+          \item $\rho_k \leftarrow \rho_k/2$ após $p$ iterações sem melhora
+        \end{enumerate}
+      \end{block}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \begin{table}
+        \scriptsize
+        \begin{tabular}{lrr}
+          \toprule
+          Limite & Valor (R\$) & Gap p/ $UB$ (\%) \\
+          \midrule
+          $z_{LP}$ \; relaxação linear   & $9\,594\,580{,}10$ & $0{,}41$ \\
+          $z_{LD}$ \; dual lagrangeano   & $9\,618\,970{,}36$ & \alert{$0{,}15$} \\
+          $UB$ \;\;\;\, incumbente MIP   & $9\,633\,634{,}50$ & --  \\
+          \midrule
+          \multicolumn{2}{l}{Ganho $z_{LD} - z_{LP}$}        & $24\,390{,}26$ \\
+          \multicolumn{2}{l}{Fração do gap fechada (\%)}     & $62{,}5$ \\
+          \multicolumn{2}{l}{Iterações (melhor em $k=0$)}    & $40$ \\
+          \bottomrule
+        \end{tabular}
+        \caption{\scriptsize Qualidade do limite lagrangeano
+          ($40$ iterações, subproblema com \emph{gap} $10^{-3}$ e $60$~s).}
+      \end{table}
+    \end{column}
+   \end{columns}
+   \begin{alertblock}{Resultado}
+     \centering
+     $z_{LD} > z_{LP}$ por $24\,390$ (R\$), isto é, \alert{$62{,}5\%$} da
+     distância entre a relaxação linear e o incumbente --- confirma que $X$
+     não tem a propriedade da integralidade.
+   \end{alertblock}
+
+\end{frame}
+
+% ===================== 16. LAGRANGEANA: CONVERGENCIA =====================
+\begin{frame}{Relaxação lagrangeana: convergência do subgradiente}
+  \centering
+  \includegraphics[width=0.94\linewidth]{figuras/5_lagrange_convergencia.png}
+
+  \vspace{-0.1em}
+  \raggedright
+  \begin{block}{Leitura}
+    \footnotesize
+    \begin{itemize}\itemsep1pt
+      \item Melhor limite: \alert{$L(0) = 9\,618\,970{,}36$}. Já em
+            $\lambda = 0$ --- só removendo rampas e tempo mínimo --- o
+            subproblema \emph{inteiro} rende $0{,}25\%$ acima de $z_{LP}$, e
+            nenhuma das $40$ iterações seguintes supera esse valor.
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+\end{document}
