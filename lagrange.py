@@ -92,7 +92,7 @@ TEMPO_LP = 300          # s para a relaxacao linear de referencia
 
 DUALIZAR_RAMPA_HIDRO = True   # False => dualiza so as rampas termicas
 
-CROP_ETAPAS=24
+CROP_ETAPAS=0
 
 ####################### DADOS #######################
 barras = [f'B{i}' for i in range(1, 15)]
