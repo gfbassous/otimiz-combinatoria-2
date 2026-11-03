@@ -2,7 +2,7 @@
 import numpy as np
 
 S_BASE = 100.0
-SEMANAS = 2                 # horizonte em semanas; T e derivado daqui
+SEMANAS = 3                 # horizonte em semanas; T e derivado daqui
 HORAS_SEMANA = 7 * 24
 T = SEMANAS * HORAS_SEMANA
 
@@ -46,7 +46,7 @@ ute = ['UTE1', 'UTE2', 'UTE3', 'UTE4', 'UTE5']
 ute_barra = ['B3', 'B6', 'B8', 'B2', 'B13']
 ute_pot = np.array([110., 85., 70., 60., 45.])
 ute_cvu = np.array([42., 85., 130., 210., 450.])
-ute_g_min = np.array([45., 30., 22., 15.,  5.])
+ute_g_min = np.array([22., 25., 22., 15., 5.])  # <= rampa (senao a unidade nao consegue partir/parar)
 ute_rampa = np.array([22., 25., 30., 40., 45.])
 t_on = np.array([10, 10, 5, 5, 2])
 t_off = np.array([5, 5, 5, 5, 5])
@@ -72,25 +72,48 @@ perfil = {
     'R': np.array([.55, .49, .45, .43, .43, .45, .53, .64, .70, .72, .73, .74,
                    .73, .72, .73, .76, .82, .92, 1.00, .99, .93, .84, .72, .62]),
 }
-# fator diario: semana util com onda de calor na quinta, fim de semana leve
+# fator diario base: semana util com onda de calor na quinta, fim de semana leve
 fator_dia = np.array([0.94, 0.97, 1.00, 1.03, 0.98, 0.86, 0.83])
-PICO_ALVO = 715.0   # MW no instante de ponta do sistema
+
+# ---- demanda aleatoria com MEDIA preservada e >= 1 ponto de ESTRESSE ----
+MEDIA_ALVO = 520.0   # MW: media da demanda TOTAL no horizonte (preservada)
+PICO_ALVO = 715.0    # MW: demanda total na hora mais carregada (estresse; 765 MW instalados)
+SIGMA_DIA = 0.06     # desvio (lognormal) do fator aleatorio de cada dia
+SIGMA_HORA = 0.018   # desvio do ruido horario de cada barra
 
 
 def series_demanda(seed=20260826):
-    rng = np.random.default_rng(seed)
-    N = len(barras)
-    D = np.zeros((N, T))
+    """Demanda (N, T) aleatoria, deterministica na semente.
+
+    1. perfil horario por tipo de barra x fator do dia da semana x fator aleatorio
+       do dia (comum a todas as barras) x ruido horario por barra;
+    2. escala para que a media da demanda total seja MEDIA_ALVO;
+    3. "estica" cada barra em torno da PROPRIA media: D = m_b + a (D0 - m_b), com
+       a escolhido para que o maximo da demanda total seja exatamente PICO_ALVO.
+       A transformacao e afim, entao a media de cada barra (e do total) e mantida
+       e o pico passa a existir -- a aleatoriedade so decide ONDE ele cai.
+    Sem crescimento semanal: todas as semanas tem a mesma media esperada.
+    """
+    dias = -(-T // 24)
+    rng_dia = np.random.default_rng([seed, 0])
+    f_dia = np.repeat(np.array([fator_dia[d % 7] for d in range(dias)])
+                      * rng_dia.lognormal(-SIGMA_DIA ** 2 / 2, SIGMA_DIA, dias), 24)[:T]
+    D = np.zeros((len(barras), T))
     for k, b in enumerate(barras):
         if carga_base[b] <= 0:
             continue
-        p = perfil[tipo_carga[b]]
-        semana = np.concatenate([fator_dia[d] * p for d in range(7)])
-        # cada semana adicional entra 10% mais carregada que a anterior
-        serie = np.concatenate([1.1 ** s * semana for s in range(SEMANAS)])
-        ruido = 1.0 + rng.normal(0, 0.018, T)
-        D[k] = carga_base[b] * serie * ruido
-    D *= PICO_ALVO / D.sum(axis=0).max()
+        p = np.tile(perfil[tipo_carga[b]], dias)[:T]
+        ruido = 1.0 + np.random.default_rng([seed, k + 1]).normal(0, SIGMA_HORA, T)
+        D[k] = carga_base[b] * p * f_dia * ruido
+    D *= MEDIA_ALVO / D.sum(axis=0).mean()
+
+    tot = D.sum(axis=0)
+    a = (PICO_ALVO - MEDIA_ALVO) / (tot.max() - MEDIA_ALVO)
+    m_b = D.mean(axis=1, keepdims=True)
+    D = m_b + a * (D - m_b)
+    if D.min() < 0:
+        raise ValueError(f'esticamento a={a:.2f} gerou demanda negativa; '
+                         'reduza PICO_ALVO ou SIGMA_DIA')
     return np.round(D, 2)
 
 

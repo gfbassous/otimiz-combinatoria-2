@@ -8,8 +8,10 @@ Abas escritas:
 
 As series sao deterministicas (sementes fixas): rodar de novo reproduz os mesmos dados.
 O horizonte e definido por SEMANAS em sistema.py (T = SEMANAS * 168 horas).
-Para retunar o estresse do sistema, mexa em sistema.py (PICO_ALVO, medias de vazao,
-capacidades das linhas) e rode este script novamente.
+A demanda e aleatoria, com MEDIA_ALVO (MW, total) preservada e o maximo do total
+igual a PICO_ALVO (ponto de estresse garantido). Para retunar o estresse, mexa em
+sistema.py (MEDIA_ALVO, PICO_ALVO, SIGMA_DIA, medias de vazao, capacidades das
+linhas) e rode este script novamente.
 """
 import numpy as np
 import pandas as pd

@@ -90,7 +90,7 @@ TEMPO_SUB = 60          # s por subproblema
 TEMPO_UB = 120          # s para achar o incumbente (UB) com o modelo completo
 TEMPO_LP = 300          # s para a relaxacao linear de referencia
 
-DUALIZAR_RAMPA_HIDRO = True   # False => dualiza so as rampas termicas
+DUALIZAR_RAMPA_HIDRO = False   # False => dualiza so as rampas termicas
 
 CROP_ETAPAS=0
 
@@ -156,7 +156,7 @@ uhe_montante = [None, 'UHE1', 'UHE2', 'UHE3']
 
 ute_pot = np.array([110., 85., 70., 60., 45.])
 ute_cvu = np.array([42., 85., 130., 210., 450.])
-ute_g_min = np.array([45., 30., 22., 15., 5.])
+ute_g_min = np.array([22., 25., 22., 15., 5.])  # <= rampa (senao a unidade nao consegue partir/parar)
 ute_rampa = np.array([22., 25., 30., 40., 45.])
 ute_barra = ['B3', 'B6', 'B8', 'B2', 'B13']
 ute_custo_partida = np.array([9000., 4500., 2600., 1300., 450.])
