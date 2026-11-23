@@ -397,7 +397,7 @@ uhe_montante = [None, 'UHE1', 'UHE2', 'UHE3']  # UHE montante de cada UHE (None 
 # --- Termelétricas: da base barata ao peaker caro ---
 ute_pot = np.array([110., 85., 70., 60., 45.])  # Potência máxima de cada UTE
 ute_cvu = np.array([42., 85., 130., 210., 450.])  # Custo variável unitário de cada UTE
-ute_g_min = np.array([45., 30., 22., 15., 5.])  # Geração mínima de cada UTE
+ute_g_min = np.array([22., 25., 22., 15., 5.])  # <= rampa (senao nao consegue partir/parar) — Geração mínima de cada UTE
 ute_rampa = np.array([22., 25., 30., 40., 45.])  # Rampa de subida/descida de cada UTE
 ute_barra = ['B3', 'B6', 'B8', 'B2', 'B13']  # Barra onde cada UTE está localizada
 ute_custo_partida = np.array([9000., 4500., 2600., 1300., 450.])  # Custo de cada partida
